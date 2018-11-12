@@ -1,6 +1,15 @@
+import argparse
 import boto3
 import ipaddress
 import pprint
+
+# Testing out argparse
+parser = argparse.ArgumentParser()
+parser.add_argument("source_ip", help="Source IP of the traffic")
+# parser.add_argument("destination_ip", help="Destination IP of the traffic")
+args = parser.parse_args()
+print(f"Checking if {args.source_ip} is in a VPC...")
+# print(f"Checking if {args.source_ip} is allowed to {args.destination_ip}")
 
 pp = pprint.PrettyPrinter()
 
