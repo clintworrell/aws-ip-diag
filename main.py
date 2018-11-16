@@ -6,15 +6,16 @@ import pprint
 # Testing out argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("source_ip", help="Source IP of the traffic")
-# parser.add_argument("destination_ip", help="Destination IP of the traffic")
+parser.add_argument("destination_ip", help="Destination IP of the traffic")
 args = parser.parse_args()
-print(f"Checking if {args.source_ip} is in a VPC...")
-# print(f"Checking if {args.source_ip} is allowed to {args.destination_ip}")
+print(f"Checking if {args.source_ip} and {args.destination_ip} are in VPCs...")
 
 pp = pprint.PrettyPrinter()
 
 client = boto3.client('ec2')
 
+source_ip = args.source_ip
+destination_ip = args.destination_ip
 vpcs = client.describe_vpcs()['Vpcs']
 
 
@@ -47,5 +48,5 @@ def get_vpc_name_tag(vpc):
     return vpc_name
 
 
-detect_vpc("10.20.48.231")
-detect_vpc("172.31.25.149")
+detect_vpc(source_ip)
+detect_vpc(destination_ip)
