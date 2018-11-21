@@ -71,27 +71,31 @@ def main():
     if source_vpc_id and destination_vpc_id:
         print("Source and destination are in VPCs...")
         source_vpc_subnets = get_vpc_subnets(source_vpc_id)
-        print(source_vpc_subnets)
+        # print(source_vpc_subnets)
         destination_vpc_subnets = get_vpc_subnets(destination_vpc_id)
         vpc_subnets = [source_vpc_subnets, destination_vpc_subnets]
+    else:
+        return
 
     # Identify source and destination subnets
     # Should be refactored later
+    source_subnet = None
     for subnet in source_vpc_subnets['Subnets']:
         subnet_cidr = ipaddress.IPv4Network(subnet['CidrBlock'])
+
         if source_ip in subnet_cidr:
             source_subnet = subnet
-            print(source_subnet)
             break
-        else:
-            source_subnet = None
-            print("Source IP isn't in a subnet")
+
+    if source_subnet == None:
+        print("Source IP isn't in a subnet")
+        return
 
     for subnet in destination_vpc_subnets['Subnets']:
         subnet_cidr = ipaddress.IPv4Network(subnet['CidrBlock'])
         if destination_ip in subnet_cidr:
             destination_subnet = subnet
-            print(destination_subnet)
+            # print(destination_subnet)
             break
         else:
             destination_subnet = None
@@ -99,6 +103,36 @@ def main():
 
     # Identify NACLs associated with the source and destination subnets
     if source_subnet and destination_subnet:
+        source_subnet_id = source_subnet['SubnetId']
+        source_subnet_nacl = ec2.describe_network_acls(
+            Filters = [
+                {
+                    'Name': 'association.subnet-id',
+                    'Values': [
+                        source_subnet_id,
+                    ]
+                }
+            ]
+        )
+
+        destination_subnet_id = destination_subnet['SubnetId']
+        destination_subnet_nacl = ec2.describe_network_acls(
+            Filters = [
+                {
+                    'Name': 'association.subnet-id',
+                    'Values': [
+                        destination_subnet_id,
+                    ]
+                }
+            ]
+        )
+
+        # print(source_subnet_nacl)
+
+        # Get NACL entries
+        source_nacl_entries = source_subnet_nacl['NetworkAcls'][0]['Entries']
+        destination_nacl_entries = destination_subnet_nacl['NetworkAcls'][0]['Entries']
+
         if source_subnet['VpcId'] != destination_subnet['VpcId']:
             # Check peering
             # Check routes
@@ -108,19 +142,8 @@ def main():
         else:
             # Source and destination are in the same VPC
             # Check that source_subnet NACL has egress rule to destination subnet
-            source_subnet_id = source_subnet['SubnetId']
-            source_subnet_nacl = ec2.describe_network_acls(
-                Filters = [
-                    {
-                        'Name': 'association.subnet-id',
-                        'Values': [
-                            source_subnet_id,
-                        ]
-                    }
-                ]
-            )
-            print(source_subnet_nacl)
-            print(source_subnet_id)
+            print(f"\nSource NACL entries:\n{source_nacl_entries}")
+            print(f"\nDestination NACL entries:\n{destination_nacl_entries}\n")
             # Check that NACLs allow traffic to itself
             # Check subnets allow egress from source to dest and allow ingress from source to dest
             pass
