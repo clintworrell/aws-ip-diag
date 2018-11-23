@@ -123,6 +123,9 @@ def main():
 
         destination_nacl_entries = destination_nacl['NetworkAcls'][0]['Entries']
         destination_nacl_entries = sorted(destination_nacl_entries, key=lambda x: x['RuleNumber'])
+    else:
+        print("Source and/or destination VPC does not have a subnet matching the IP provided")
+        return
 
     if source_subnet['VpcId'] == destination_subnet['VpcId']:
         # Source and destination are in the same VPC
