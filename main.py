@@ -57,8 +57,6 @@ def get_vpc_subnets(vpc_id):
         ]
     )
 
-    # subnets = subnets['Subnets']
-
     return subnets
 
 
@@ -106,16 +104,20 @@ def main():
         print("Source and/or destination are not in a VPC")
         return
 
-    # Get the source and destination subnets
-    source_subnet = get_subnet(source_vpc_subnets, source_ip)
-    destination_subnet = get_subnet(destination_vpc_subnets, destination_ip)
+    # Get the subnet of source and destination
+    if source_vpc_subnets and destination_vpc_subnets:
+        source_subnet = get_subnet(source_vpc_subnets, source_ip)
+        destination_subnet = get_subnet(destination_vpc_subnets, destination_ip)
+    else:
+        print("Source and/or destination VPC does not have any subnets")
+        return
 
-    # Get the source and destination NACLs
+    # Get the NACLs
     if source_subnet and destination_subnet:
         source_nacl = get_nacl(source_subnet)
         destination_nacl = get_nacl(destination_subnet)
 
-        # Get NACL entries
+        # Get NACL entries and sort them by rule number
         source_nacl_entries = source_nacl['NetworkAcls'][0]['Entries']
         source_nacl_entries = sorted(source_nacl_entries, key=lambda x: x['RuleNumber'])
 
