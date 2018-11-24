@@ -140,35 +140,33 @@ def main():
         destination_nacl_entries = destination_subnet_nacl['NetworkAcls'][0]['Entries']
         destination_nacl_entries = sorted(destination_nacl_entries, key=lambda x: x['RuleNumber'])
 
-        if source_subnet['VpcId'] != destination_subnet['VpcId']:
-            # Check peering
-            # Check routes
-            # Check NACLs (inbound and outbound on both source and destination)
-            # Check security groups
-            pass
+    if source_subnet['VpcId'] == destination_subnet['VpcId']:
+        # Source and destination are in the same VPC
+        # Check to see if source_subnet NACL has egress rule to destination
+        source_nacl_egress_rule_num_match = None  # NACL rule number that matches source IP
+
+        for entry in source_nacl_entries:
+            if (destination_ip in ipaddress.IPv4Network(entry['CidrBlock']) and
+                entry['Egress'] == True and
+                entry['RuleAction'] == "allow"):
+                source_nacl_egress_rule_num_match = entry['RuleNumber']
+                break
+
+        if source_nacl_egress_rule_num_match == None:
+            print("Source outbound NACL will not allow this traffic")
+            return
         else:
-            # Source and destination are in the same VPC
-            # Check to see if source_subnet NACL has egress rule to destination
-            source_nacl_egress_rule_num_match = None  # NACL rule number that matches source IP
+            print(f"NACL rule number {source_nacl_egress_rule_num_match} will allow this traffic")
 
-            for entry in source_nacl_entries:
-                if (destination_ip in ipaddress.IPv4Network(entry['CidrBlock']) and
-                    entry['Egress'] == True and
-                    entry['RuleAction'] == "allow"):
-                    source_nacl_egress_rule_num_match = entry['RuleNumber']
-                    break
+        # Check that NACLs allow traffic to itself
+        # Check subnets allow egress from source to dest and allow ingress from source to dest
+    else:
+        # Check peering
+        # Check routes
+        # Check NACLs (inbound and outbound on both source and destination)
+        # Check security groups
 
-            if source_nacl_egress_rule_num_match == None:
-                print("Source outbound NACL will not allow this traffic")
-                return
-            else:
-                print(f"NACL rule number {source_nacl_egress_rule_num_match} will allow this traffic")
-
-
-            # print(f"\nSource NACL entries:\n{source_nacl_entries}")
-            # print(f"\nDestination NACL entries:\n{destination_nacl_entries}\n")
-            # Check that NACLs allow traffic to itself
-            # Check subnets allow egress from source to dest and allow ingress from source to dest
+        pass
 
 if __name__ == "__main__":
     main()
