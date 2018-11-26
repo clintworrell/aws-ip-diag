@@ -144,7 +144,6 @@ def main():
             return
         else:
             print(f"NACL rule number {source_nacl_egress_rule_num_match} will allow this traffic")
-
         # Check that NACLs allow traffic to itself
         # Check subnets allow egress from source to dest and allow ingress from source to dest
     else:
