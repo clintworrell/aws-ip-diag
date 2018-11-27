@@ -8,6 +8,8 @@ import pprint
 parser = argparse.ArgumentParser()
 parser.add_argument("source_ip", help="Source IP of the traffic")
 parser.add_argument("destination_ip", help="Destination IP of the traffic")
+parser.add_argument("port", help="Destination port of the traffic")
+parser.add_argument("protocol", help="Protocol of the traffic (tcp, udp, icmp, or all)")
 args = parser.parse_args()
 print(f"Checking if {args.source_ip} and {args.destination_ip} are in VPCs...")
 
@@ -90,6 +92,15 @@ def get_nacl(subnet):
 def main():
     source_ip = ipaddress.IPv4Address(args.source_ip)
     destination_ip = ipaddress.IPv4Address(args.destination_ip)
+    port = int(args.port)
+    protocol = args.protocol
+
+    protocols = {
+        "all": '-1',
+        "icmp": '1',
+        "tcp": '6',
+        "udp": '17',
+    }
 
     source_vpc_id = get_vpc(source_ip)
     destination_vpc_id = get_vpc(destination_ip)
@@ -127,17 +138,48 @@ def main():
         print("Source and/or destination VPC does not have a subnet matching the IP provided")
         return
 
+    protocol_num = protocols[protocol]
+
     if source_subnet['VpcId'] == destination_subnet['VpcId']:
         # Source and destination are in the same VPC
         # Check to see if source_subnet NACL has egress rule to destination
         source_nacl_egress_rule_num_match = None  # NACL rule number that matches source IP
 
+        print(source_nacl_entries)
+
         for entry in source_nacl_entries:
-            if (destination_ip in ipaddress.IPv4Network(entry['CidrBlock']) and
-                entry['Egress'] == True and
-                entry['RuleAction'] == "allow"):
-                source_nacl_egress_rule_num_match = entry['RuleNumber']
-                break
+            entry_cidr = ipaddress.IPv4Network(entry['CidrBlock'])
+            port_range = None
+
+            if destination_ip in entry_cidr:
+
+                # Explicit deny outbound
+                if entry['RuleAction'] == "deny" and entry['Egress'] == true:
+                    print(f"NACL rule number {entry['RuleNumber']} is explicitly denying this traffic outbound")
+                    return
+
+                # if entry
+
+            try:
+                entry['PortRange']
+            except KeyError:
+                present = False
+            else:
+                present = True
+
+            if present:
+                start_port = entry['PortRange']['From']
+                end_port = entry['PortRange']['To']
+                port_range = range(start_port, end_port + 1)
+
+                if (destination_ip in entry_cidr and
+                    entry['Egress'] == True and
+                    entry['RuleAction'] == "allow" and
+                    entry['Protocol'] == protocol_num and
+                    port in port_range):
+
+                    source_nacl_egress_rule_num_match = entry['RuleNumber']
+                    break
 
         if source_nacl_egress_rule_num_match == None:
             print("Source outbound NACL will not allow this traffic")
