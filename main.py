@@ -96,10 +96,10 @@ def main():
     protocol = args.protocol
 
     protocols = {
-        "all": '-1',
-        "icmp": '1',
-        "tcp": '6',
-        "udp": '17',
+        'all': '-1',
+        'icmp': '1',
+        'tcp': '6',
+        'udp': '17',
     }
 
     source_vpc_id = get_vpc(source_ip)
@@ -142,17 +142,16 @@ def main():
 
     source_nacl_outbound_allowed = None
     source_nacl_inbound_allowed = None
+    source_nacl_egress_rule_num_match = None  # NACL rule number that matches source IP
+    source_nacl_inbound_rule_matched = False
+    source_nacl_outbound_rule_matched = False
+
     destination_nacl_inbound_allowed = None
     destination_nacl_outbound_allowed = None
 
+
     if source_subnet['VpcId'] == destination_subnet['VpcId']:
         # Source and destination are in the same VPC
-        # Check to see if source_subnet NACL has egress rule to destination
-        source_nacl_egress_rule_num_match = None  # NACL rule number that matches source IP
-        source_nacl_inbound_rule_matched = False
-        source_nacl_outbound_rule_matched = False
-        # print(source_nacl_entries)
-
         for entry in source_nacl_entries:
             entry_cidr = ipaddress.IPv4Network(entry['CidrBlock'])
             port_range = None
@@ -180,16 +179,12 @@ def main():
 
                 if port not in port_range:
                     continue
-
-            if present and entry['Egress'] == False:
-                print("port range exists in entry and it's an ingress rule")
+            elif present and entry['Egress'] == False:
                 start_port = entry['PortRange']['From']
                 end_port = entry['PortRange']['To']
                 high_ports = range(1024, 65536)
                 if start_port not in high_ports or end_port not in high_ports:
                     continue
-
-
             else:
                 # If 'PortRange' doesn't exist then I think it will be an ICMP entry and will
                 # need to add additional logic to handle the IcmpTypeCode dict
@@ -197,27 +192,25 @@ def main():
 
             if source_nacl_outbound_rule_matched == False:
                 if entry['RuleAction'] == 'allow' and entry['Egress'] == True:
-                    print("source nacl outbound allowed")
                     source_nacl_outbound_rule_matched = True
                     source_nacl_outbound_allowed = True
+                    continue
 
                 if entry['RuleAction'] == 'deny' and entry['Egress'] == True:
-                    print("source nacl outbound not allowed")
                     source_nacl_outbound_rule_matched = True
                     source_nacl_outbound_allowed = False
                     break
 
             if source_nacl_inbound_rule_matched == False:
                 if entry['RuleAction'] == 'allow' and entry['Egress'] == False:
-                    print("source nacl inbound allowed")
                     source_nacl_inbound_rule_matched = True
                     source_nacl_inbound_allowed = True
+                    continue
 
                 if entry['RuleAction'] == 'deny' and entry['Egress'] == False:
-                    print(entry)
-                    print("source nacl inbound not allowed")
                     source_nacl_inbound_rule_matched = True
                     source_nacl_inbound_allowed = False
+                    break
 
                 # if (destination_ip in entry_cidr and
                 #     entry['Egress'] == True and
