@@ -89,6 +89,30 @@ def get_nacl(subnet):
     return nacl
 
 
+def check_nacl(entry):
+    try:
+        entry['PortRange']
+    except KeyError:
+        #TODO - If there's no port range I think you need to check for Icmp traffic
+        print(entry, "No port range in this NACL entry")
+        return  # Remove once ICMP traffic being detected
+    else:
+        port_range = True
+
+    start_port = entry['PortRange']['From']
+    end_port = entry['PortRange']['To']
+    port_range = range(start_port, end_port + 1)
+    traffic_direction = 'egress' if entry['Egress'] else 'ingress'
+
+    return port_range, traffic_direction
+
+
+def nacl_port_range(nacl_entry):
+    port_range = nacl_entry['PortRange']
+    traffic_direction = 'egress' if nacl_entry['Egress'] else 'ingress'
+    print(traffic_direction)
+
+
 def main():
     source_ip = ipaddress.IPv4Address(args.source_ip)
     destination_ip = ipaddress.IPv4Address(args.destination_ip)
@@ -156,22 +180,25 @@ def main():
             entry_cidr = ipaddress.IPv4Network(entry['CidrBlock'])
             port_range = None
 
-            if destination_ip not in entry_cidr:
-                print("Destination not in entry_cidr")
+            if source_ip not in entry_cidr and destination_ip not in entry_cidr:
+                print("Neither source nor destination in entry_cidr")
                 continue
 
             if protocol_num != entry['Protocol']:
                 print("Protocol does not match")
                 continue
 
-            try:
-                entry['PortRange']
-            except KeyError:
-                present = False
-            else:
-                present = True
+            port_range, traffic_direction = check_nacl(entry)
+            # try:
+            #     entry['PortRange']
+            # except KeyError:
+            #     present = False
+            # else:
+            #     present = True
+            #     nacl_port_range(entry)
 
-            if present and entry['Egress'] == True:
+
+            if port_range and traffic_direction == 'egress':
                 start_port = entry['PortRange']['From']
                 end_port = entry['PortRange']['To']
                 #TODO - account for PortRange to be -1 to -1 aka ALL
@@ -179,7 +206,7 @@ def main():
 
                 if port not in port_range:
                     continue
-            elif present and entry['Egress'] == False:
+            elif port_range and traffic_direction == 'ingress':
                 start_port = entry['PortRange']['From']
                 end_port = entry['PortRange']['To']
                 high_ports = range(1024, 65536)
@@ -235,6 +262,7 @@ def main():
         # Check that NACLs allow traffic to itself
         # Check subnets allow egress from source to dest and allow ingress from source to dest
     else:
+        # Source and destination are in different VPCs
         # Check peering
         # Check routes
         # Check NACLs (inbound and outbound on both source and destination)
