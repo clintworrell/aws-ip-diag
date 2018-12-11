@@ -95,14 +95,14 @@ def check_nacl(entry):
     except KeyError:
         #TODO - If there's no port range I think you need to check for Icmp traffic
         print(entry, "No port range in this NACL entry")
-        return  # Remove once ICMP traffic being detected
+        port_range = False
+        traffic_direction = 'egress' if entry['Egress'] else 'ingress'
     else:
         port_range = True
-
-    start_port = entry['PortRange']['From']
-    end_port = entry['PortRange']['To']
-    port_range = range(start_port, end_port + 1)
-    traffic_direction = 'egress' if entry['Egress'] else 'ingress'
+        start_port = entry['PortRange']['From']
+        end_port = entry['PortRange']['To']
+        port_range = range(start_port, end_port + 1)
+        traffic_direction = 'egress' if entry['Egress'] else 'ingress'
 
     return port_range, traffic_direction
 
@@ -186,7 +186,7 @@ def main():
                 print(f"Neither source nor destination in NACL entry CIDR ({entry_cidr}), checking next entry...")
                 continue
 
-            if protocol_num != entry['Protocol']:
+            if protocol_num != '-1' and protocol_num != entry['Protocol']:
                 print(f"Protocol does not match ({entry['Protocol']}), checking next entry...")
                 continue
 
@@ -223,22 +223,26 @@ def main():
                 if entry['RuleAction'] == 'allow' and entry['Egress'] == True:
                     source_nacl_outbound_rule_matched = True
                     source_nacl_outbound_allowed = True
+                    print(f"Source outbound NACL matched rule #{entry['RuleNumber']} and it is allowed")
                     continue
 
                 if entry['RuleAction'] == 'deny' and entry['Egress'] == True:
                     source_nacl_outbound_rule_matched = True
                     source_nacl_outbound_allowed = False
+                    print(f"Source outbound NACL matched rule #{entry['RuleNumber']} and it is not allowed")
                     break
 
             if source_nacl_inbound_rule_matched == False:
                 if entry['RuleAction'] == 'allow' and entry['Egress'] == False:
                     source_nacl_inbound_rule_matched = True
                     source_nacl_inbound_allowed = True
+                    print(f"Source inbound NACL matched rule #{entry['RuleNumber']} and it is allowed")
                     continue
 
                 if entry['RuleAction'] == 'deny' and entry['Egress'] == False:
                     source_nacl_inbound_rule_matched = True
                     source_nacl_inbound_allowed = False
+                    print(f"Source inbound NACL matched rule #{entry['RuleNumber']}")
                     break
 
                 # if (destination_ip in entry_cidr and
@@ -250,6 +254,7 @@ def main():
                 #     source_nacl_egress_rule_num_match = entry['RuleNumber']
                 #     break
         for entry in destination_nacl_entries:
+            # print(entry)  #FIXME - debug only
             entry_cidr = ipaddress.IPv4Network(entry['CidrBlock'])
             port_range = None
 
@@ -257,7 +262,7 @@ def main():
                 print(f"Neither source nor destination in NACL entry CIDR ({entry_cidr}), checking next entry...")
                 continue
 
-            if protocol_num != entry['Protocol']:
+            if protocol_num != '-1' and protocol_num != entry['Protocol']:
                 print(f"Protocol does not match ({entry['Protocol']}), checking next entry...")
                 continue
 
@@ -277,10 +282,12 @@ def main():
                 high_ports = range(1024, 65536)
                 if start_port not in high_ports or end_port not in high_ports:
                     continue
-            else:
+            elif protocol_num == '-1':
+                print("Protocol number == -1 aka ALL -- FIXME")  #FIXME
                 # If 'PortRange' doesn't exist then I think it will be an ICMP entry and will
                 # need to add additional logic to handle the IcmpTypeCode dict
-                pass  #FIXME
+            elif protocol_num == '1':
+                print("This is an ICMP rule -- FIXME")  #FIXME
 
             if destination_nacl_outbound_rule_matched == False:
                 if entry['RuleAction'] == 'allow' and entry['Egress'] == True:
