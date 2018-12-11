@@ -26,7 +26,7 @@ def get_vpc(ip):
         vpc_id = vpc['VpcId']
 
         if ip in vpc_cidr:
-            return vpc_id
+            return vpc_id, vpc_name
         else:
             return None
 
@@ -126,15 +126,15 @@ def main():
         'udp': '17',
     }
 
-    source_vpc_id = get_vpc(source_ip)
-    destination_vpc_id = get_vpc(destination_ip)
+    source_vpc_id, source_vpc_name = get_vpc(source_ip)
+    destination_vpc_id, destination_vpc_name = get_vpc(destination_ip)
 
     # Get the subnets of the VPCs
     if source_vpc_id and destination_vpc_id:
-        print("Source and destination are in VPCs...")
+        print(f"Source is in VPC: {source_vpc_id} ({source_vpc_name})")
+        print(f"Destination is in VPC: {destination_vpc_id} ({destination_vpc_name})")
         source_vpc_subnets = get_vpc_subnets(source_vpc_id)
         destination_vpc_subnets = get_vpc_subnets(destination_vpc_id)
-        vpc_subnets = [source_vpc_subnets, destination_vpc_subnets]
     else:
         print("Source and/or destination are not in a VPC")
         return
@@ -172,6 +172,8 @@ def main():
 
     destination_nacl_inbound_allowed = None
     destination_nacl_outbound_allowed = None
+    destination_nacl_inbound_rule_matched = False
+    destination_nacl_outbound_rule_matched = False
 
 
     if source_subnet['VpcId'] == destination_subnet['VpcId']:
@@ -181,11 +183,11 @@ def main():
             port_range = None
 
             if source_ip not in entry_cidr and destination_ip not in entry_cidr:
-                print("Neither source nor destination in entry_cidr")
+                print(f"Neither source nor destination in NACL entry CIDR ({entry_cidr}), checking next entry...")
                 continue
 
             if protocol_num != entry['Protocol']:
-                print("Protocol does not match")
+                print(f"Protocol does not match ({entry['Protocol']}), checking next entry...")
                 continue
 
             port_range, traffic_direction = check_nacl(entry)
@@ -215,7 +217,7 @@ def main():
             else:
                 # If 'PortRange' doesn't exist then I think it will be an ICMP entry and will
                 # need to add additional logic to handle the IcmpTypeCode dict
-                pass
+                pass  #FIXME
 
             if source_nacl_outbound_rule_matched == False:
                 if entry['RuleAction'] == 'allow' and entry['Egress'] == True:
@@ -247,12 +249,75 @@ def main():
 
                 #     source_nacl_egress_rule_num_match = entry['RuleNumber']
                 #     break
+        for entry in destination_nacl_entries:
+            entry_cidr = ipaddress.IPv4Network(entry['CidrBlock'])
+            port_range = None
+
+            if source_ip not in entry_cidr and destination_ip not in entry_cidr:
+                print(f"Neither source nor destination in NACL entry CIDR ({entry_cidr}), checking next entry...")
+                continue
+
+            if protocol_num != entry['Protocol']:
+                print(f"Protocol does not match ({entry['Protocol']}), checking next entry...")
+                continue
+
+            port_range, traffic_direction = check_nacl(entry)
+
+            if port_range and traffic_direction == 'egress':
+                start_port = entry['PortRange']['From']
+                end_port = entry['PortRange']['To']
+                #TODO - account for PortRange to be -1 to -1 aka ALL
+                port_range = range(start_port, end_port + 1)
+
+                if port not in port_range:
+                    continue
+            elif port_range and traffic_direction == 'ingress':
+                start_port = entry['PortRange']['From']
+                end_port = entry['PortRange']['To']
+                high_ports = range(1024, 65536)
+                if start_port not in high_ports or end_port not in high_ports:
+                    continue
+            else:
+                # If 'PortRange' doesn't exist then I think it will be an ICMP entry and will
+                # need to add additional logic to handle the IcmpTypeCode dict
+                pass  #FIXME
+
+            if destination_nacl_outbound_rule_matched == False:
+                if entry['RuleAction'] == 'allow' and entry['Egress'] == True:
+                    destination_nacl_outbound_rule_matched = True
+                    destination_nacl_outbound_allowed = True
+                    print(f"Destination outbound NACL matched rule #{entry['RuleNumber']} and it is allowed")
+                    continue
+
+                if entry['RuleAction'] == 'deny' and entry['Egress'] == True:
+                    destination_nacl_outbound_rule_matched = True
+                    destination_nacl_outbound_allowed = False
+                    print(f"Destination outbound NACL matched rule #{entry['RuleNumber']} and it is not allowed")
+                    break
+
+            if destination_nacl_inbound_rule_matched == False:
+                if entry['RuleAction'] == 'allow' and entry['Egress'] == False:
+                    destination_nacl_inbound_rule_matched = True
+                    destination_nacl_inbound_allowed = True
+                    print(f"Destination inbound NACL matched rule #{entry['RuleNumber']} and it is allowed")
+                    continue
+
+                if entry['RuleAction'] == 'deny' and entry['Egress'] == False:
+                    destination_nacl_inbound_rule_matched = True
+                    destination_nacl_inbound_allowed = False
+                    print(f"Destination inbound NACL matched rule #{entry['RuleNumber']} and it is not allowed")
+                    break
 
         if source_nacl_outbound_allowed == True and source_nacl_inbound_allowed == True:
             print("Source NACLs allow this traffic")
 
         else:
             print("Source NACLs do not allow this traffic")
+
+        if destination_nacl_outbound_allowed == True and destination_nacl_inbound_allowed == True:
+            print("Destination NACLs allow this traffic")
+        else:
+            print("Destination NACLs do not allow this traffic")
 
         # if source_nacl_egress_rule_num_match == None:
         #     print("Source outbound NACL will not allow this traffic")
