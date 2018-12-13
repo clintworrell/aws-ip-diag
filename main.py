@@ -4,16 +4,6 @@ import ipaddress
 import pprint
 
 
-# argparse
-parser = argparse.ArgumentParser()
-parser.add_argument("source_ip", help="Source IP of the traffic")
-parser.add_argument("destination_ip", help="Destination IP of the traffic")
-parser.add_argument("port", help="Destination port of the traffic")
-parser.add_argument("protocol", help="Protocol of the traffic (only tcp and udp supported currently)")
-args = parser.parse_args()
-print(f"Checking if {args.source_ip} and {args.destination_ip} are in VPCs...")
-
-
 ec2 = boto3.client('ec2')
 
 
@@ -32,19 +22,8 @@ def get_vpc(ip):
 
 
 def get_vpc_name(vpc):
-    try:
-        vpc['Tags'][0]['Value']
-    except KeyError:
-        present = False
-    else:
-        present = True
-
-    if present:
-        vpc_name = vpc['Tags'][0]['Value']
-    else:
-        vpc_name = "VPC name tag missing"
-
-    return vpc_name
+    tags = dict((t['Key'], t['Value']) for t in vpc['Tags'])
+    return tags.get('Name', "VPC name tag missing")
 
 
 def get_vpc_subnets(vpc_id):
@@ -89,19 +68,16 @@ def get_nacl(subnet):
     return nacl
 
 
-def check_nacl(entry):
+def get_nacl_entry_details(entry):
     try:
-        entry['PortRange']
-    except KeyError:
-        #TODO - If there's no port range I think you need to check for Icmp traffic
-        port_range = False
-        traffic_direction = 'egress' if entry['Egress'] else 'ingress'
-    else:
-        port_range = True
         start_port = entry['PortRange']['From']
         end_port = entry['PortRange']['To']
         port_range = range(start_port, end_port + 1)
-        traffic_direction = 'egress' if entry['Egress'] else 'ingress'
+    except KeyError:
+        #TODO - If there's no port range I think you need to check for Icmp traffic
+        port_range = None
+
+    traffic_direction = 'egress' if entry['Egress'] else 'ingress'
 
     return port_range, traffic_direction
 
@@ -113,6 +89,14 @@ def nacl_port_range(nacl_entry):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("source_ip", help="Source IP of the traffic")
+    parser.add_argument("destination_ip", help="Destination IP of the traffic")
+    parser.add_argument("port", help="Destination port of the traffic")
+    parser.add_argument("protocol", help="Protocol of the traffic (only tcp and udp supported currently)")
+    args = parser.parse_args()
+    print(f"Checking if {args.source_ip} and {args.destination_ip} are in VPCs...")
+
     source_ip = ipaddress.IPv4Address(args.source_ip)
     destination_ip = ipaddress.IPv4Address(args.destination_ip)
     port = int(args.port)
@@ -192,7 +176,7 @@ def main():
             # if protocol_num != '-1' and protocol_num != entry['Protocol']:
             #     continue
 
-            port_range, traffic_direction = check_nacl(entry)
+            port_range, traffic_direction = get_nacl_entry_details(entry)
             # try:
             #     entry['PortRange']
             # except KeyError:
@@ -273,7 +257,7 @@ def main():
             #     print(f"Protocol does not match ({entry['Protocol']}), checking next entry...")
             #     continue
 
-            port_range, traffic_direction = check_nacl(entry)
+            port_range, traffic_direction = get_nacl_entry_details(entry)
 
             if port_range and traffic_direction == 'egress':
                 start_port = entry['PortRange']['From']
